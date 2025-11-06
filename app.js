@@ -1,3 +1,7 @@
+// Password protection
+const CORRECT_PASSWORD = 'dienstplanung';
+const PASSWORD_KEY = 'urlaubskalender_auth';
+
 // Team members with distinct colors
 const TEAM_MEMBERS = [
     { id: 1, name: 'Alex Schmidt', color: '#FF6B6B' },
@@ -7,12 +11,35 @@ const TEAM_MEMBERS = [
     { id: 5, name: 'Michael Becker', color: '#98D8C8' }
 ];
 
+// Public holidays in Hessen for 2026
+const HOLIDAYS_2026 = [
+    { date: '2026-01-01', name: 'Neujahr' },
+    { date: '2026-04-03', name: 'Karfreitag' },
+    { date: '2026-04-06', name: 'Ostermontag' },
+    { date: '2026-05-01', name: 'Tag der Arbeit' },
+    { date: '2026-05-14', name: 'Christi Himmelfahrt' },
+    { date: '2026-05-25', name: 'Pfingstmontag' },
+    { date: '2026-06-04', name: 'Fronleichnam' },
+    { date: '2026-10-03', name: 'Tag der Deutschen Einheit' },
+    { date: '2026-12-25', name: '1. Weihnachtsfeiertag' },
+    { date: '2026-12-26', name: '2. Weihnachtsfeiertag' }
+];
+
+// Special days that don't count as vacation days
+const SPECIAL_DAYS = ['2026-12-24', '2026-12-31'];
+
+const MAX_VACATION_DAYS = 30;
+
 // Application state
-let currentMonth = new Date(2026, 0, 1); // January 2026
 let vacations = [];
 let editingVacationId = null;
 
 // DOM elements
+const loginScreen = document.getElementById('loginScreen');
+const loginForm = document.getElementById('loginForm');
+const passwordInput = document.getElementById('passwordInput');
+const loginError = document.getElementById('loginError');
+const mainApp = document.getElementById('mainApp');
 const modal = document.getElementById('vacationModal');
 const addVacationBtn = document.getElementById('addVacationBtn');
 const closeBtn = document.querySelector('.close');
@@ -20,19 +47,54 @@ const cancelBtn = document.getElementById('cancelBtn');
 const vacationForm = document.getElementById('vacationForm');
 const memberSelect = document.getElementById('memberSelect');
 const memberNameSelect = document.getElementById('memberName');
-const prevMonthBtn = document.getElementById('prevMonth');
-const nextMonthBtn = document.getElementById('nextMonth');
-const calendarDiv = document.getElementById('calendar');
-const currentMonthH2 = document.getElementById('currentMonth');
+const yearlyCalendarDiv = document.getElementById('yearlyCalendar');
 const legendItemsDiv = document.getElementById('legendItems');
 const vacationListContent = document.getElementById('vacationListContent');
+const vacationDaysCards = document.getElementById('vacationDaysCards');
+const workingDaysInfo = document.getElementById('workingDaysInfo');
+const startDateInput = document.getElementById('startDate');
+const endDateInput = document.getElementById('endDate');
 
 // Initialize the app
 function init() {
+    checkAuth();
+}
+
+// Check authentication
+function checkAuth() {
+    const isAuthenticated = sessionStorage.getItem(PASSWORD_KEY) === 'true';
+    if (isAuthenticated) {
+        showMainApp();
+    } else {
+        loginScreen.style.display = 'flex';
+        mainApp.style.display = 'none';
+    }
+}
+
+// Handle login
+function handleLogin(e) {
+    e.preventDefault();
+    const password = passwordInput.value;
+
+    if (password === CORRECT_PASSWORD) {
+        sessionStorage.setItem(PASSWORD_KEY, 'true');
+        showMainApp();
+    } else {
+        loginError.textContent = 'Falsches Passwort. Bitte versuchen Sie es erneut.';
+        passwordInput.value = '';
+        passwordInput.focus();
+    }
+}
+
+// Show main app
+function showMainApp() {
+    loginScreen.style.display = 'none';
+    mainApp.style.display = 'block';
     loadVacations();
     populateMemberSelects();
     renderLegend();
-    renderCalendar();
+    renderVacationDaysCards();
+    renderYearlyCalendar();
     renderVacationList();
     attachEventListeners();
 }
@@ -95,6 +157,58 @@ function getMemberById(id) {
     return TEAM_MEMBERS.find(m => m.id === parseInt(id));
 }
 
+// Check if date is a weekend
+function isWeekend(date) {
+    const day = date.getDay();
+    return day === 0 || day === 6; // Sunday or Saturday
+}
+
+// Check if date is a public holiday
+function isHoliday(date) {
+    const dateStr = formatDateISO(date);
+    return HOLIDAYS_2026.some(holiday => holiday.date === dateStr);
+}
+
+// Check if date is a special day (24.12 or 31.12)
+function isSpecialDay(date) {
+    const dateStr = formatDateISO(date);
+    return SPECIAL_DAYS.includes(dateStr);
+}
+
+// Format date to ISO string (YYYY-MM-DD)
+function formatDateISO(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// Calculate working days between dates (excluding weekends, holidays, and special days)
+function calculateWorkingDays(startDate, endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    let workingDays = 0;
+
+    const current = new Date(start);
+    while (current <= end) {
+        if (!isWeekend(current) && !isHoliday(current) && !isSpecialDay(current)) {
+            workingDays++;
+        }
+        current.setDate(current.getDate() + 1);
+    }
+
+    return workingDays;
+}
+
+// Calculate total vacation days used by a member
+function getUsedVacationDays(memberId) {
+    return vacations
+        .filter(v => v.memberId === memberId)
+        .reduce((total, vacation) => {
+            return total + calculateWorkingDays(vacation.startDate, vacation.endDate);
+        }, 0);
+}
+
 // Get vacations for a specific date
 function getVacationsForDate(date) {
     const selectedMemberId = memberSelect.value;
@@ -114,64 +228,137 @@ function getVacationsForDate(date) {
     });
 }
 
-// Render calendar
-function renderCalendar() {
-    calendarDiv.innerHTML = '';
+// Render vacation days cards
+function renderVacationDaysCards() {
+    vacationDaysCards.innerHTML = '';
 
-    // Update month header
+    TEAM_MEMBERS.forEach(member => {
+        const usedDays = getUsedVacationDays(member.id);
+        const remainingDays = MAX_VACATION_DAYS - usedDays;
+        const percentage = (usedDays / MAX_VACATION_DAYS) * 100;
+
+        const card = document.createElement('div');
+        card.className = 'vacation-day-card';
+        card.style.borderLeftColor = member.color;
+
+        const name = document.createElement('div');
+        name.className = 'vacation-day-card-name';
+        name.textContent = member.name;
+
+        const stats = document.createElement('div');
+        stats.className = 'vacation-day-card-stats';
+
+        const usedStat = document.createElement('div');
+        usedStat.className = 'vacation-day-stat used';
+        usedStat.innerHTML = `
+            <span class="vacation-day-stat-value">${usedDays}</span>
+            <span class="vacation-day-stat-label">Genommen</span>
+        `;
+
+        const remainingStat = document.createElement('div');
+        remainingStat.className = 'vacation-day-stat remaining';
+        remainingStat.innerHTML = `
+            <span class="vacation-day-stat-value">${remainingDays}</span>
+            <span class="vacation-day-stat-label">Übrig</span>
+        `;
+
+        stats.appendChild(usedStat);
+        stats.appendChild(remainingStat);
+
+        const progress = document.createElement('div');
+        progress.className = 'vacation-day-progress';
+
+        const progressBar = document.createElement('div');
+        progressBar.className = 'vacation-day-progress-bar';
+
+        const progressFill = document.createElement('div');
+        progressFill.className = 'vacation-day-progress-fill';
+        progressFill.style.width = `${Math.min(percentage, 100)}%`;
+        progressFill.style.backgroundColor = member.color;
+
+        progressBar.appendChild(progressFill);
+        progress.appendChild(progressBar);
+
+        card.appendChild(name);
+        card.appendChild(stats);
+        card.appendChild(progress);
+
+        vacationDaysCards.appendChild(card);
+    });
+}
+
+// Render yearly calendar (all 12 months)
+function renderYearlyCalendar() {
+    yearlyCalendarDiv.innerHTML = '';
+
     const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
                        'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-    currentMonthH2.textContent = `${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
 
-    // Day headers
-    const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-    dayNames.forEach(day => {
-        const header = document.createElement('div');
-        header.className = 'calendar-day-header';
-        header.textContent = day;
-        calendarDiv.appendChild(header);
-    });
+    for (let month = 0; month < 12; month++) {
+        const monthContainer = document.createElement('div');
+        monthContainer.className = 'month-container';
 
-    // Get first day of month (adjusted for Monday start)
-    const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-    let firstDayOfWeek = firstDay.getDay();
-    firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Adjust for Monday start
+        const monthTitle = document.createElement('div');
+        monthTitle.className = 'month-title';
+        monthTitle.textContent = monthNames[month];
 
-    // Get last day of month
-    const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
-    const daysInMonth = lastDay.getDate();
+        const monthCalendar = document.createElement('div');
+        monthCalendar.className = 'month-calendar';
 
-    // Previous month days
-    const prevMonthLastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 0);
-    const prevMonthDays = prevMonthLastDay.getDate();
+        // Day headers
+        const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+        dayNames.forEach(day => {
+            const header = document.createElement('div');
+            header.className = 'calendar-day-header';
+            header.textContent = day;
+            monthCalendar.appendChild(header);
+        });
 
-    for (let i = firstDayOfWeek - 1; i >= 0; i--) {
-        const day = prevMonthDays - i;
-        const dayDiv = createDayElement(day, true, -1);
-        calendarDiv.appendChild(dayDiv);
-    }
+        // Get first day of month (adjusted for Monday start)
+        const firstDay = new Date(2026, month, 1);
+        let firstDayOfWeek = firstDay.getDay();
+        firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
 
-    // Current month days
-    const today = new Date();
-    for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-        const isToday = date.toDateString() === today.toDateString();
-        const dayDiv = createDayElement(day, false, 0, date, isToday);
-        calendarDiv.appendChild(dayDiv);
-    }
+        // Get last day of month
+        const lastDay = new Date(2026, month + 1, 0);
+        const daysInMonth = lastDay.getDate();
 
-    // Next month days
-    const totalCells = calendarDiv.children.length - 7; // Subtract header row
-    const remainingCells = 42 - totalCells - 7; // 6 rows * 7 days - header
+        // Previous month days
+        const prevMonthLastDay = new Date(2026, month, 0);
+        const prevMonthDays = prevMonthLastDay.getDate();
 
-    for (let day = 1; day <= remainingCells; day++) {
-        const dayDiv = createDayElement(day, true, 1);
-        calendarDiv.appendChild(dayDiv);
+        for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+            const day = prevMonthDays - i;
+            const dayDiv = createDayElement(day, true);
+            monthCalendar.appendChild(dayDiv);
+        }
+
+        // Current month days
+        const today = new Date();
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(2026, month, day);
+            const isToday = date.toDateString() === today.toDateString();
+            const dayDiv = createDayElement(day, false, date, isToday);
+            monthCalendar.appendChild(dayDiv);
+        }
+
+        // Next month days
+        const totalCells = monthCalendar.children.length - 7; // Subtract header row
+        const remainingCells = 42 - totalCells - 7; // 6 rows * 7 days - header
+
+        for (let day = 1; day <= remainingCells; day++) {
+            const dayDiv = createDayElement(day, true);
+            monthCalendar.appendChild(dayDiv);
+        }
+
+        monthContainer.appendChild(monthTitle);
+        monthContainer.appendChild(monthCalendar);
+        yearlyCalendarDiv.appendChild(monthContainer);
     }
 }
 
 // Create day element
-function createDayElement(day, isOtherMonth, monthOffset, date = null, isToday = false) {
+function createDayElement(day, isOtherMonth, date = null, isToday = false) {
     const dayDiv = document.createElement('div');
     dayDiv.className = 'calendar-day';
 
@@ -181,6 +368,24 @@ function createDayElement(day, isOtherMonth, monthOffset, date = null, isToday =
 
     if (isToday) {
         dayDiv.classList.add('today');
+    }
+
+    // Add special styling for weekends, holidays, and special days
+    if (date && !isOtherMonth) {
+        if (isWeekend(date)) {
+            dayDiv.classList.add('weekend');
+        }
+        if (isHoliday(date)) {
+            dayDiv.classList.add('holiday');
+            const holiday = HOLIDAYS_2026.find(h => h.date === formatDateISO(date));
+            if (holiday) {
+                dayDiv.title = holiday.name;
+            }
+        }
+        if (isSpecialDay(date)) {
+            dayDiv.classList.add('special-day');
+            dayDiv.title = 'Kein Urlaubstag';
+        }
     }
 
     const dayNumber = document.createElement('div');
@@ -214,19 +419,70 @@ function createDayElement(day, isOtherMonth, monthOffset, date = null, isToday =
     return dayDiv;
 }
 
-// Format date
+// Format date for display
 function formatDate(dateString) {
     const date = new Date(dateString);
     return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-// Calculate days between dates
-function calculateDays(startDate, endDate) {
+// Calculate total calendar days
+function calculateTotalDays(startDate, endDate) {
     const start = new Date(startDate);
     const end = new Date(endDate);
     const diffTime = Math.abs(end - start);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     return diffDays;
+}
+
+// Update working days info when dates change
+function updateWorkingDaysInfo() {
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value;
+    const memberId = parseInt(memberNameSelect.value);
+
+    if (!startDate || !endDate || !memberId) {
+        workingDaysInfo.classList.remove('show');
+        return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+        workingDaysInfo.classList.remove('show');
+        return;
+    }
+
+    const workingDays = calculateWorkingDays(startDate, endDate);
+    const totalDays = calculateTotalDays(startDate, endDate);
+    const usedDays = getUsedVacationDays(memberId);
+    const currentVacationDays = editingVacationId ?
+        calculateWorkingDays(vacations.find(v => v.id === editingVacationId).startDate,
+                           vacations.find(v => v.id === editingVacationId).endDate) : 0;
+    const newUsedDays = usedDays - currentVacationDays + workingDays;
+    const remainingDays = MAX_VACATION_DAYS - newUsedDays;
+
+    workingDaysInfo.innerHTML = '';
+    workingDaysInfo.classList.add('show');
+    workingDaysInfo.classList.remove('warning', 'error');
+
+    const infoText = document.createElement('div');
+    infoText.className = 'working-days-info-text';
+    infoText.textContent = `Arbeitstage: ${workingDays} von ${totalDays} Tagen`;
+
+    const infoDetail = document.createElement('div');
+    infoDetail.className = 'working-days-info-detail';
+    infoDetail.textContent = `Nach dieser Buchung: ${newUsedDays} von ${MAX_VACATION_DAYS} Tagen genutzt (${remainingDays} übrig)`;
+
+    workingDaysInfo.appendChild(infoText);
+    workingDaysInfo.appendChild(infoDetail);
+
+    if (newUsedDays > MAX_VACATION_DAYS) {
+        workingDaysInfo.classList.add('error');
+        const errorText = document.createElement('div');
+        errorText.className = 'working-days-info-text';
+        errorText.textContent = `⚠️ Überschreitung um ${newUsedDays - MAX_VACATION_DAYS} Tage!`;
+        workingDaysInfo.appendChild(errorText);
+    } else if (remainingDays < 5) {
+        workingDaysInfo.classList.add('warning');
+    }
 }
 
 // Render vacation list
@@ -267,8 +523,9 @@ function renderVacationList() {
 
         const durationDiv = document.createElement('div');
         durationDiv.className = 'vacation-duration';
-        const days = calculateDays(vacation.startDate, vacation.endDate);
-        durationDiv.textContent = `(${days} Tag${days !== 1 ? 'e' : ''})`;
+        const workingDays = calculateWorkingDays(vacation.startDate, vacation.endDate);
+        const totalDays = calculateTotalDays(vacation.startDate, vacation.endDate);
+        durationDiv.textContent = `(${workingDays} Arbeitstage von ${totalDays} Tagen)`;
 
         info.appendChild(memberDiv);
         info.appendChild(datesDiv);
@@ -301,6 +558,7 @@ function renderVacationList() {
 function openModal() {
     editingVacationId = null;
     vacationForm.reset();
+    workingDaysInfo.classList.remove('show');
     modal.style.display = 'block';
 }
 
@@ -308,6 +566,7 @@ function openModal() {
 function closeModal() {
     editingVacationId = null;
     vacationForm.reset();
+    workingDaysInfo.classList.remove('show');
     modal.style.display = 'none';
 }
 
@@ -318,9 +577,10 @@ function editVacation(id) {
 
     editingVacationId = id;
     memberNameSelect.value = vacation.memberId;
-    document.getElementById('startDate').value = vacation.startDate;
-    document.getElementById('endDate').value = vacation.endDate;
+    startDateInput.value = vacation.startDate;
+    endDateInput.value = vacation.endDate;
 
+    updateWorkingDaysInfo();
     modal.style.display = 'block';
 }
 
@@ -329,7 +589,8 @@ function deleteVacation(id) {
     if (confirm('Möchten Sie diesen Urlaub wirklich löschen?')) {
         vacations = vacations.filter(v => v.id !== id);
         saveVacations();
-        renderCalendar();
+        renderVacationDaysCards();
+        renderYearlyCalendar();
         renderVacationList();
     }
 }
@@ -339,12 +600,27 @@ function handleFormSubmit(e) {
     e.preventDefault();
 
     const memberId = parseInt(memberNameSelect.value);
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value;
 
     // Validate dates
     if (new Date(startDate) > new Date(endDate)) {
         alert('Das Enddatum muss nach dem Startdatum liegen!');
+        return;
+    }
+
+    // Calculate working days
+    const workingDays = calculateWorkingDays(startDate, endDate);
+    const usedDays = getUsedVacationDays(memberId);
+    const currentVacationDays = editingVacationId ?
+        calculateWorkingDays(vacations.find(v => v.id === editingVacationId).startDate,
+                           vacations.find(v => v.id === editingVacationId).endDate) : 0;
+    const newUsedDays = usedDays - currentVacationDays + workingDays;
+
+    // Check vacation limit
+    if (newUsedDays > MAX_VACATION_DAYS) {
+        const member = getMemberById(memberId);
+        alert(`${member.name} hat nur noch ${MAX_VACATION_DAYS - usedDays + currentVacationDays} Urlaubstage übrig. Diese Buchung würde ${workingDays} Arbeitstage benötigen.`);
         return;
     }
 
@@ -367,25 +643,14 @@ function handleFormSubmit(e) {
 
     saveVacations();
     closeModal();
-    renderCalendar();
+    renderVacationDaysCards();
+    renderYearlyCalendar();
     renderVacationList();
-}
-
-// Navigate to previous month
-function prevMonth() {
-    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
-    renderCalendar();
-}
-
-// Navigate to next month
-function nextMonth() {
-    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
-    renderCalendar();
 }
 
 // Handle member filter change
 function handleMemberFilterChange() {
-    renderCalendar();
+    renderYearlyCalendar();
     renderVacationList();
 }
 
@@ -395,9 +660,12 @@ function attachEventListeners() {
     closeBtn.addEventListener('click', closeModal);
     cancelBtn.addEventListener('click', closeModal);
     vacationForm.addEventListener('submit', handleFormSubmit);
-    prevMonthBtn.addEventListener('click', prevMonth);
-    nextMonthBtn.addEventListener('click', nextMonth);
     memberSelect.addEventListener('change', handleMemberFilterChange);
+
+    // Update working days info when dates or member changes
+    startDateInput.addEventListener('change', updateWorkingDaysInfo);
+    endDateInput.addEventListener('change', updateWorkingDaysInfo);
+    memberNameSelect.addEventListener('change', updateWorkingDaysInfo);
 
     // Close modal when clicking outside
     window.addEventListener('click', (e) => {
@@ -406,6 +674,9 @@ function attachEventListeners() {
         }
     });
 }
+
+// Initialize login form
+loginForm.addEventListener('submit', handleLogin);
 
 // Initialize the app when DOM is loaded
 document.addEventListener('DOMContentLoaded', init);

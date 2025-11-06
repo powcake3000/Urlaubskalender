@@ -7,17 +7,36 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <h1>Team Urlaubskalender 2026</h1>
+            <p class="login-subtitle">Bitte geben Sie das Passwort ein</p>
+            <form id="loginForm">
+                <div class="login-form-group">
+                    <input type="password" id="passwordInput" placeholder="Passwort" required autocomplete="off">
+                </div>
+                <button type="submit" class="btn btn-primary btn-login">Anmelden</button>
+                <div id="loginError" class="login-error"></div>
+            </form>
+        </div>
+    </div>
+
+    <div id="mainApp" class="container" style="display: none;">
         <header>
             <h1>Team Urlaubskalender 2026</h1>
             <p class="subtitle">Planen Sie Ihren Urlaub und sehen Sie die Urlaubszeiten Ihrer Teammitglieder</p>
         </header>
 
+        <div class="vacation-days-overview">
+            <h3>Urlaubstage-Übersicht (max. 30 Arbeitstage pro Person)</h3>
+            <div id="vacationDaysCards"></div>
+        </div>
+
         <div class="controls">
             <div class="team-member-selector">
                 <label for="memberSelect">Teammitglied:</label>
                 <select id="memberSelect">
-                    <option value="">Wählen Sie ein Teammitglied...</option>
+                    <option value="">Alle Teammitglieder</option>
                 </select>
             </div>
             <button id="addVacationBtn" class="btn btn-primary">Urlaub hinzufügen</button>
@@ -42,6 +61,7 @@
                         <label for="endDate">Enddatum:</label>
                         <input type="date" id="endDate" required min="2026-01-01" max="2026-12-31">
                     </div>
+                    <div id="workingDaysInfo" class="working-days-info"></div>
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary">Speichern</button>
                         <button type="button" class="btn btn-secondary" id="cancelBtn">Abbrechen</button>
@@ -51,12 +71,8 @@
         </div>
 
         <div class="calendar-section">
-            <div class="calendar-controls">
-                <button id="prevMonth" class="btn btn-nav">&lt;</button>
-                <h2 id="currentMonth"></h2>
-                <button id="nextMonth" class="btn btn-nav">&gt;</button>
-            </div>
-            <div id="calendar" class="calendar-grid"></div>
+            <h2 class="year-title">Jahresübersicht 2026</h2>
+            <div id="yearlyCalendar" class="yearly-calendar"></div>
         </div>
 
         <div class="legend">

@@ -2,6 +2,40 @@
 const CORRECT_PASSWORD = 'dienstplanung';
 const PASSWORD_KEY = 'urlaubskalender_auth';
 
+// Firebase Configuration
+// TO SET UP: Go to https://console.firebase.google.com/
+// 1. Create a new project (or use existing)
+// 2. Go to Project Settings > General > Your apps > Web app
+// 3. Copy the config values and paste them below
+// 4. Go to Realtime Database, click "Create Database", choose a region, start in "test mode"
+const firebaseConfig = {
+    apiKey: "AIzaSyBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    authDomain: "your-project.firebaseapp.com",
+    databaseURL: "https://your-project-default-rtdb.firebaseio.com",
+    projectId: "your-project",
+    storageBucket: "your-project.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:xxxxxxxxxxxxx"
+};
+
+// Initialize Firebase
+let database = null;
+let useFirebase = false;
+
+try {
+    if (typeof firebase !== 'undefined' && firebaseConfig.apiKey !== 'AIzaSyBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX') {
+        firebase.initializeApp(firebaseConfig);
+        database = firebase.database();
+        useFirebase = true;
+        console.log('Firebase connected - Real-time sync enabled');
+    } else {
+        console.log('Using localStorage - Configure Firebase for team sync');
+    }
+} catch (error) {
+    console.log('Firebase error, falling back to localStorage:', error.message);
+    useFirebase = false;
+}
+
 // Team members with distinct colors
 const TEAM_MEMBERS = [
     { id: 1, name: 'Casey', color: '#FF6B6B' },
@@ -97,17 +131,66 @@ function showMainApp() {
     renderYearlyCalendar();
     renderVacationList();
     attachEventListeners();
+
+    // Setup real-time sync if Firebase is enabled
+    setupRealtimeListener();
 }
 
-// Load vacations from localStorage
+// Load vacations from Firebase or localStorage
 function loadVacations() {
-    const stored = localStorage.getItem('vacations');
-    vacations = stored ? JSON.parse(stored) : [];
+    if (useFirebase) {
+        // Load from Firebase
+        database.ref('vacations').once('value')
+            .then((snapshot) => {
+                const data = snapshot.val();
+                vacations = data ? Object.values(data) : [];
+                renderVacationDaysCards();
+                renderYearlyCalendar();
+                renderVacationList();
+            })
+            .catch((error) => {
+                console.error('Firebase load error:', error);
+                // Fallback to localStorage
+                const stored = localStorage.getItem('vacations');
+                vacations = stored ? JSON.parse(stored) : [];
+            });
+    } else {
+        // Use localStorage
+        const stored = localStorage.getItem('vacations');
+        vacations = stored ? JSON.parse(stored) : [];
+    }
 }
 
-// Save vacations to localStorage
+// Save vacations to Firebase or localStorage
 function saveVacations() {
+    if (useFirebase) {
+        // Save to Firebase
+        const vacationsObj = {};
+        vacations.forEach(v => {
+            vacationsObj[v.id] = v;
+        });
+        database.ref('vacations').set(vacationsObj)
+            .catch((error) => {
+                console.error('Firebase save error:', error);
+                alert('Fehler beim Speichern. Bitte versuchen Sie es erneut.');
+            });
+    }
+
+    // Always save to localStorage as backup
     localStorage.setItem('vacations', JSON.stringify(vacations));
+}
+
+// Setup real-time listener for Firebase
+function setupRealtimeListener() {
+    if (useFirebase) {
+        database.ref('vacations').on('value', (snapshot) => {
+            const data = snapshot.val();
+            vacations = data ? Object.values(data) : [];
+            renderVacationDaysCards();
+            renderYearlyCalendar();
+            renderVacationList();
+        });
+    }
 }
 
 // Populate member select dropdowns

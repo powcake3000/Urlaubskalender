@@ -213,13 +213,12 @@ function getUsedVacationDays(memberId) {
 function getVacationsForDate(date) {
     const selectedMemberId = memberSelect.value;
 
-    return vacations.filter(vacation => {
-        const startDate = new Date(vacation.startDate);
-        const endDate = new Date(vacation.endDate);
-        const checkDate = new Date(date);
+    // Normalize the check date to ISO format for proper comparison
+    const checkDateStr = formatDateISO(date);
 
-        // Check if date is within vacation range
-        const isInRange = checkDate >= startDate && checkDate <= endDate;
+    return vacations.filter(vacation => {
+        // Compare date strings directly to avoid time component issues
+        const isInRange = checkDateStr >= vacation.startDate && checkDateStr <= vacation.endDate;
 
         // Filter by selected member if any
         const matchesMember = !selectedMemberId || vacation.memberId == selectedMemberId;

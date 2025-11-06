@@ -653,6 +653,67 @@ function handleMemberFilterChange() {
     renderVacationList();
 }
 
+// Export data to JSON file
+function exportData() {
+    const data = {
+        version: '1.0',
+        exportDate: new Date().toISOString(),
+        vacations: vacations
+    };
+
+    const dataStr = JSON.stringify(data, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `urlaubskalender-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    alert('Daten erfolgreich exportiert! Teilen Sie diese Datei mit Ihrem Team.');
+}
+
+// Import data from JSON file
+function importData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+
+            if (!data.vacations || !Array.isArray(data.vacations)) {
+                throw new Error('Ungültiges Datenformat');
+            }
+
+            // Confirm before overwriting
+            if (vacations.length > 0) {
+                if (!confirm('Möchten Sie die vorhandenen Daten wirklich mit den importierten Daten ersetzen?')) {
+                    return;
+                }
+            }
+
+            vacations = data.vacations;
+            saveVacations();
+            renderVacationDaysCards();
+            renderYearlyCalendar();
+            renderVacationList();
+
+            alert(`Erfolgreich importiert! ${vacations.length} Urlaubseinträge geladen.`);
+        } catch (error) {
+            alert('Fehler beim Importieren: ' + error.message);
+        }
+    };
+    reader.readAsText(file);
+
+    // Reset file input
+    event.target.value = '';
+}
+
 // Attach event listeners
 function attachEventListeners() {
     addVacationBtn.addEventListener('click', openModal);
@@ -660,6 +721,13 @@ function attachEventListeners() {
     cancelBtn.addEventListener('click', closeModal);
     vacationForm.addEventListener('submit', handleFormSubmit);
     memberSelect.addEventListener('change', handleMemberFilterChange);
+
+    // Export/Import buttons
+    document.getElementById('exportBtn').addEventListener('click', exportData);
+    document.getElementById('importBtn').addEventListener('click', () => {
+        document.getElementById('importFile').click();
+    });
+    document.getElementById('importFile').addEventListener('change', importData);
 
     // Update working days info when dates or member changes
     startDateInput.addEventListener('change', updateWorkingDaysInfo);

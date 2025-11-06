@@ -103,6 +103,14 @@ header h1 {
 .subtitle {
     color: #666;
     font-size: 1.1em;
+    margin-bottom: 15px;
+}
+
+.data-controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
 }
 
 .controls {

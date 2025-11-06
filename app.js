@@ -4,11 +4,11 @@ const PASSWORD_KEY = 'urlaubskalender_auth';
 
 // Team members with distinct colors
 const TEAM_MEMBERS = [
-    { id: 1, name: 'Alex Schmidt', color: '#FF6B6B' },
-    { id: 2, name: 'Maria Müller', color: '#4ECDC4' },
-    { id: 3, name: 'Thomas Weber', color: '#45B7D1' },
-    { id: 4, name: 'Sarah Fischer', color: '#FFA07A' },
-    { id: 5, name: 'Michael Becker', color: '#98D8C8' }
+    { id: 1, name: 'Casey', color: '#FF6B6B' },
+    { id: 2, name: 'Felix', color: '#4ECDC4' },
+    { id: 3, name: 'Ihtisham', color: '#45B7D1' },
+    { id: 4, name: 'Kathrin', color: '#FFA07A' },
+    { id: 5, name: 'Peter', color: '#98D8C8' }
 ];
 
 // Public holidays in Hessen for 2026

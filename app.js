@@ -675,8 +675,11 @@ function attachEventListeners() {
     });
 }
 
-// Initialize login form
-loginForm.addEventListener('submit', handleLogin);
-
 // Initialize the app when DOM is loaded
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+    // Attach login form listener
+    loginForm.addEventListener('submit', handleLogin);
+
+    // Initialize app
+    init();
+});
